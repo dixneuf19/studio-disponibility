@@ -1,0 +1,15 @@
+{
+  "extends": [
+    "config:base",
+    ":dependencyDashboard",
+    ":automergeMinor",
+    ":automergeBranch",
+    ":maintainLockFilesWeekly"
+  ],
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["python"],
+      "automerge": false
+    }
+  ]
+}
