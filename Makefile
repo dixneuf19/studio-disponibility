@@ -1,6 +1,6 @@
 .PHONY: shell install install-dev dev build run push release release-multi deploy
 
-PACKAGE_NAME=src/studio_availability
+PACKAGE_NAME=app
 DOCKER_REPOSITERY=ghcr.io/dixneuf19
 IMAGE_NAME=studio-availability
 IMAGE_TAG=$(shell git rev-parse --short HEAD)

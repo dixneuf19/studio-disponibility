@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Studio Availability</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.5.0/dist/semantic.min.css">
+    <script src="https://unpkg.com/htmx.org/dist/htmx.js"></script>
+</head>
+
+<body>
+    <div class="ui container">
+        <h1>Studio Availability</h1> <!-- Added h1 title -->
+        <form id="availabilityForm" hx-post="/availability" hx-target="#result" class="ui form">
+            <div class="two fields">
+                <div class="field">
+                    <label for="startDate">Start Date:</label>
+                    <input type="date" id="startDate" name="startDate">
+                </div>
+                <div class="field">
+                    <label for="endDate">End Date:</label>
+                    <input type="date" id="endDate" name="endDate">
+                </div>
+            </div>
+
+            <button type="submit" class="ui button">Submit</button>
+        </form>
+
+        <div id="result"></div>
+    </div>
+</body>
+
+</html>
