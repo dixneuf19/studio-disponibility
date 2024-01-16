@@ -1,0 +1,20 @@
+    <h1>Current Room Reservations</h1>
+    {% for date, room_availabilities in room_availabilities_per_date.items() %}
+    {% if room_availabilities %}
+        <div>
+            <h2>{{ date }}</h2>
+            {% for room in room_availibities %}
+            <div>
+                <h2>{{ room.name }}</h2>
+                <p>Size: {{ room.size }}m²</p>
+                <h3>Availabilities</h3>
+                <ul>
+                    {% for availability in room.availabilities %}
+                    <li>{{ availability.start.strftime('%H:%M') }} - {{ availability.end.strftime('%H:%M') }} - {{ (datetime(1900, 1, 1) + availability.duration).strftime('%Hh%M') }} </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}

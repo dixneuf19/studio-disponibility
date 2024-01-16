@@ -10,21 +10,40 @@
 <body>
     <div class="ui container">
         <h1>Studio Availability</h1> <!-- Added h1 title -->
-        <form id="availabilityForm" hx-post="/availability" hx-target="#result" class="ui form">
+        <form id="availabilityForm" hx-get="/availability" hx-target="#result" class="ui form">
             <div class="two fields">
                 <div class="field">
                     <label for="startDate">Start Date:</label>
-                    <input type="date" id="startDate" name="startDate">
+                    <input type="date" id="startDate" name="start_date">
                 </div>
                 <div class="field">
                     <label for="endDate">End Date:</label>
-                    <input type="date" id="endDate" name="endDate">
+                    <input type="date" id="endDate" name="end_date">
                 </div>
+            </div>
+            
+            <div class="field">
+                <label for="minRoomSize">Minimum Room Size (m²):</label>
+                <input type="number" id="minRoomSize" name="min_room_size" value="50">
+            </div>
+            
+            <div class="field">
+                <label for="minAvailabilityDuration">Minimum Availability Duration:</label>
+                <input type="text" id="minAvailabilityDuration" name="min_availability_duration" value="01:00:00">
+            </div>
+            
+            <div class="field">
+                <label for="startTime">Start Time:</label>
+                <input type="time" id="startTime" name="start_time" value="19:00">
+            </div>
+            
+            <div class="field">
+                <label for="endTime">End Time:</label>
+                <input type="time" id="endTime" name="end_time" value="00:00">
             </div>
 
             <button type="submit" class="ui button">Submit</button>
         </form>
-
         <div id="result"></div>
     </div>
 </body>
