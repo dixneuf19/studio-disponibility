@@ -39,28 +39,16 @@ async def availability(
     start_time: time = time(hour=19),
     end_time: time = time(hour=00),
 ):
-    room_bookings_per_date = {}
+    room_availabilities_per_date = {}
     for day in range((end_date - start_date).days + 1):
         date = start_date + timedelta(days=day)
-        room_bookings_per_date[date] = await get_quickstudio_bookings(date)
-
-    room_availabilities_per_date = {}
-    for date, room_bookings in room_bookings_per_date.items():
-        room_availabilities = [
-            compute_room_availability(
-                room_bookings,
-                timedelta(minutes=min_availability_duration),
-                start_time,
-                end_time,
-            )
-            for room_bookings in room_bookings
-        ]
-        room_availabilities_per_date[date] = [
-            room_availability
-            for room_availability in room_availabilities
-            if room_availability.size >= min_room_size
-            and len(room_availability.availabilities) > 0
-        ]
+        room_availabilities_per_date[date] = await get_studio_availability(
+            date=date,
+            start_time=start_time,
+            end_time=end_time,
+            min_room_size=min_room_size,
+            min_availability_duration=timedelta(minutes=min_availability_duration),
+        )
 
     return templates.TemplateResponse(
         request=request,
@@ -70,6 +58,34 @@ async def availability(
             "datetime": datetime,
         },
     )
+
+
+async def get_studio_availability(
+    date: date,
+    start_time: time,
+    end_time: time,
+    min_room_size,
+    min_availability_duration: timedelta,
+) -> list[RoomAvailability]:
+    room_bookings = await get_quickstudio_bookings(date)
+
+    room_availabilities = [
+        compute_room_availability(
+            room_bookings,
+            min_availability_duration,
+            start_time,
+            end_time,
+        )
+        for room_bookings in room_bookings
+    ]
+    filtered_room_availabilities = [
+        room_availability
+        for room_availability in room_availabilities
+        if room_availability.size >= min_room_size
+        and len(room_availability.availabilities) > 0
+    ]
+
+    return filtered_room_availabilities
 
 
 async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
@@ -134,6 +150,7 @@ def compute_room_availability(
 
     return RoomAvailability(
         name=_strip_room_name(room_booking.name),
+        date=room_booking.open,
         size=room_booking.size,
         availabilities=filtered_availabilities,
     )
