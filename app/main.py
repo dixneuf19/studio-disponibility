@@ -1,14 +1,22 @@
 # import uvicorn # debug
+import asyncio
+import os
 import re
 from datetime import date, datetime, time, timedelta
 
 import httpx
+from cachetools import TTLCache
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .models import Availability, RoomAvailability, RoomBooking
+
+CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))  # 5 minutes
+BOOKING_URL = os.getenv(
+    "BOOKING_URL", "https://www.quickstudio.com/en/studios/hf-music-studio-14/bookings"
+)
 
 app = FastAPI()
 
@@ -39,29 +47,23 @@ async def availability(
     start_time: time = time(hour=19),
     end_time: time = time(hour=00),
 ):
-    room_bookings_per_date = {}
+    tasks = []
     for day in range((end_date - start_date).days + 1):
         date = start_date + timedelta(days=day)
-        room_bookings_per_date[date] = await get_quickstudio_bookings(date)
-
-    room_availabilities_per_date = {}
-    for date, room_bookings in room_bookings_per_date.items():
-        room_availabilities = [
-            compute_room_availability(
-                room_bookings,
-                timedelta(minutes=min_availability_duration),
-                start_time,
-                end_time,
+        task = asyncio.create_task(
+            get_studio_availability(
+                date=date,
+                start_time=start_time,
+                end_time=end_time,
+                min_room_size=min_room_size,
+                min_availability_duration=timedelta(minutes=min_availability_duration),
             )
-            for room_bookings in room_bookings
-        ]
-        room_availabilities_per_date[date] = [
-            room_availability
-            for room_availability in room_availabilities
-            if room_availability.size >= min_room_size
-            and len(room_availability.availabilities) > 0
-        ]
+        )
+        tasks.append(task)
 
+    room_availabilities = await asyncio.gather(*tasks)
+
+    room_availabilities_per_date = dict(room_availabilities)
     return templates.TemplateResponse(
         request=request,
         name="availabilities.html",
@@ -72,16 +74,56 @@ async def availability(
     )
 
 
+async def get_studio_availability(
+    date: date,
+    start_time: time,
+    end_time: time,
+    min_room_size,
+    min_availability_duration: timedelta,
+) -> tuple[date, list[RoomAvailability]]:
+    room_bookings = await get_quickstudio_bookings(date)
+
+    room_availabilities = [
+        compute_room_availability(
+            room_bookings,
+            min_availability_duration,
+            start_time,
+            end_time,
+        )
+        for room_bookings in room_bookings
+    ]
+    filtered_room_availabilities = [
+        room_availability
+        for room_availability in room_availabilities
+        if room_availability.size >= min_room_size
+        and len(room_availability.availabilities) > 0
+    ]
+
+    return date, filtered_room_availabilities
+
+
+cache = TTLCache(maxsize=100, ttl=CACHE_TTL)  # 5 minutes
+
+
 async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
+    # Check if the bookings for the given date are already in the cache
+    if date in cache:
+        return cache[date]
+
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.get(
-            "https://www.quickstudio.com/en/studios/hf-music-studio-14/bookings",
+            BOOKING_URL,
             params={"date": date.isoformat()},
             headers={"Accept": "application/json"},  # Force JSON response
         )
 
     response.raise_for_status()
-    return [RoomBooking(**room) for room in response.json()]
+    bookings = [RoomBooking(**room) for room in response.json()]
+
+    # Store the bookings in the cache
+    cache[date] = bookings
+
+    return bookings
 
 
 def compute_room_availability(
@@ -134,6 +176,7 @@ def compute_room_availability(
 
     return RoomAvailability(
         name=_strip_room_name(room_booking.name),
+        date=room_booking.open,
         size=room_booking.size,
         availabilities=filtered_availabilities,
     )

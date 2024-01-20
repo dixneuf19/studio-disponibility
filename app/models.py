@@ -36,5 +36,6 @@ class Availability(BaseModel):
 
 class RoomAvailability(BaseModel):
     name: str
+    date: datetime
     size: int
     availabilities: list[Availability]
