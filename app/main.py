@@ -1,5 +1,6 @@
 # import uvicorn # debug
 import asyncio
+import os
 import re
 from datetime import date, datetime, time, timedelta
 
@@ -11,6 +12,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .models import Availability, RoomAvailability, RoomBooking
+
+CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))  # 5 minutes
+BOOKING_URL = os.getenv(
+    "BOOKING_URL", "https://www.quickstudio.com/en/studios/hf-music-studio-14/bookings"
+)
 
 app = FastAPI()
 
@@ -96,7 +102,7 @@ async def get_studio_availability(
     return date, filtered_room_availabilities
 
 
-cache = TTLCache(maxsize=100, ttl=300)  # 5 minutes
+cache = TTLCache(maxsize=100, ttl=CACHE_TTL)  # 5 minutes
 
 
 async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
@@ -106,7 +112,7 @@ async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
 
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.get(
-            "https://www.quickstudio.com/en/studios/hf-music-studio-14/bookings",
+            BOOKING_URL,
             params={"date": date.isoformat()},
             headers={"Accept": "application/json"},  # Force JSON response
         )
