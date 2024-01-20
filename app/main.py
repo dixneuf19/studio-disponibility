@@ -12,6 +12,12 @@ from .models import Availability, RoomAvailability, RoomBooking
 
 app = FastAPI()
 
+
+@app.get("/health")
+async def get_health() -> dict[str, str]:
+    return {"message": "OK"}
+
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
