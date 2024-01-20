@@ -36,13 +36,13 @@ test:
 	rye run pytest --cov=${PACKAGE_NAME} --cov-report=xml tests
 
 build:
-	docker buildx build --platform SUPPORTED_PLATFORMS -t $(DOCKER_IMAGE_PATH) .
+	docker buildx build --platform ${SUPPORTED_PLATFORMS} -t $(DOCKER_IMAGE_PATH) . 
 
 docker-run: build
 	docker run -p 8000:80 --env-file=.env $(DOCKER_IMAGE_PATH)
 
 push:
-	docker buildx build --platform SUPPORTED_PLATFORMS -t $(DOCKER_IMAGE_PATH) . --push
+	docker buildx build --platform ${SUPPORTED_PLATFORMS} -t $(DOCKER_IMAGE_PATH) . --push
 
 secret:
 	kubectl create secret generic studio-availability --from-env-file=.env

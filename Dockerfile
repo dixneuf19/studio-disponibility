@@ -1,19 +1,15 @@
-# Dockerfile
-# Uses multi-stage builds requiring Docker 17.05 or higher
-# See https://docs.docker.com/develop/develop-images/multistage-build/
+FROM python:3.12-slim
 
-# Creating a python base with shared environment variables
-FROM python:3.12.0-slim
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=off \
-    PIP_DISABLE_PIP_VERSION_CHECK=on \
-    PIP_DEFAULT_TIMEOUT=100
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
 COPY ./pyproject.toml ./requirements.lock ./
 RUN sed '/-e file:./d' requirements.lock > requirements.txt
-RUN pip install -r /requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /requirements.txt
 
-COPY ./studio-availability /studio-availability
+COPY ./app .
+COPY ./templates ./templates
+COPY ./static ./static
 
-CMD ["uvicorn", "studio-availability.main:app" , "--host", "0.0.0.0", "--port", "80"]
+ENTRYPOINT ["uvicorn", "app.main:app" , "--host", "0.0.0.0", "--port", "80"]
