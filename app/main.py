@@ -4,6 +4,7 @@ import re
 from datetime import date, datetime, time, timedelta
 
 import httpx
+from cachetools import TTLCache
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -95,7 +96,14 @@ async def get_studio_availability(
     return date, filtered_room_availabilities
 
 
+cache = TTLCache(maxsize=100, ttl=300)  # 5 minutes
+
+
 async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
+    # Check if the bookings for the given date are already in the cache
+    if date in cache:
+        return cache[date]
+
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.get(
             "https://www.quickstudio.com/en/studios/hf-music-studio-14/bookings",
@@ -104,7 +112,12 @@ async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
         )
 
     response.raise_for_status()
-    return [RoomBooking(**room) for room in response.json()]
+    bookings = [RoomBooking(**room) for room in response.json()]
+
+    # Store the bookings in the cache
+    cache[date] = bookings
+
+    return bookings
 
 
 def compute_room_availability(
