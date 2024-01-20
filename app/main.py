@@ -1,4 +1,5 @@
 # import uvicorn # debug
+import asyncio
 import re
 from datetime import date, datetime, time, timedelta
 
@@ -39,17 +40,23 @@ async def availability(
     start_time: time = time(hour=19),
     end_time: time = time(hour=00),
 ):
-    room_availabilities_per_date = {}
+    tasks = []
     for day in range((end_date - start_date).days + 1):
         date = start_date + timedelta(days=day)
-        room_availabilities_per_date[date] = await get_studio_availability(
-            date=date,
-            start_time=start_time,
-            end_time=end_time,
-            min_room_size=min_room_size,
-            min_availability_duration=timedelta(minutes=min_availability_duration),
+        task = asyncio.create_task(
+            get_studio_availability(
+                date=date,
+                start_time=start_time,
+                end_time=end_time,
+                min_room_size=min_room_size,
+                min_availability_duration=timedelta(minutes=min_availability_duration),
+            )
         )
+        tasks.append(task)
 
+    room_availabilities = await asyncio.gather(*tasks)
+
+    room_availabilities_per_date = dict(room_availabilities)
     return templates.TemplateResponse(
         request=request,
         name="availabilities.html",
@@ -66,7 +73,7 @@ async def get_studio_availability(
     end_time: time,
     min_room_size,
     min_availability_duration: timedelta,
-) -> list[RoomAvailability]:
+) -> tuple[date, list[RoomAvailability]]:
     room_bookings = await get_quickstudio_bookings(date)
 
     room_availabilities = [
@@ -85,7 +92,7 @@ async def get_studio_availability(
         and len(room_availability.availabilities) > 0
     ]
 
-    return filtered_room_availabilities
+    return date, filtered_room_availabilities
 
 
 async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
