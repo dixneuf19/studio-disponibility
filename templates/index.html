@@ -3,6 +3,7 @@
 
 <head>
     <title>Studio Availability</title>
+    <link id="favicon" rel="icon" type="image/x-icon" href="static/favicon.ico">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.5.0/dist/semantic.min.css">
     <script src="https://unpkg.com/htmx.org/dist/htmx.js"></script>
 </head>
@@ -14,34 +15,35 @@
             <div class="two fields">
                 <div class="field">
                     <label for="startDate">Start Date:</label>
-                    <input type="date" id="startDate" name="start_date">
+                    <input type="date" id="startDate" name="start_date" value="{{ datetime.now().strftime('%Y-%m-%d') }}">
                 </div>
                 <div class="field">
                     <label for="endDate">End Date:</label>
-                    <input type="date" id="endDate" name="end_date">
+                    <input type="date" id="endDate" name="end_date" value="{{ datetime.now().strftime('%Y-%m-%d') }}">
                 </div>
             </div>
-            
-            <div class="field">
-                <label for="minRoomSize">Minimum Room Size (m²):</label>
-                <input type="number" id="minRoomSize" name="min_room_size" value="50">
+            <div class="two fields">
+                <div class="field">
+                    <label for="startTime">Start Time:</label>
+                    <input type="time" id="startTime" name="start_time" value="19:00">
+                </div>
+                
+                <div class="field">
+                    <label for="endTime">End Time:</label>
+                    <input type="time" id="endTime" name="end_time" value="00:00">
+                </div>
             </div>
-            
-            <div class="field">
-                <label for="minAvailabilityDuration">Minimum Availability Duration:</label>
-                <input type="text" id="minAvailabilityDuration" name="min_availability_duration" value="01:00:00">
+            <div class="two fields">
+                <div class="field">
+                    <label for="minRoomSize">Minimum Room Size m²:</label>
+                    <input type="number" id="minRoomSize" name="min_room_size" value="50">
+                </div>
+                
+                <div class="field">
+                    <label for="minAvailabilityDuration">Minimum Availability Duration in minutes</label>
+                    <input type="number" id="minAvailabilityDuration" name="min_availability_duration" value="60">
+                </div>
             </div>
-            
-            <div class="field">
-                <label for="startTime">Start Time:</label>
-                <input type="time" id="startTime" name="start_time" value="19:00">
-            </div>
-            
-            <div class="field">
-                <label for="endTime">End Time:</label>
-                <input type="time" id="endTime" name="end_time" value="00:00">
-            </div>
-
             <button type="submit" class="ui button">Submit</button>
         </form>
         <div id="result"></div>

@@ -1,4 +1,4 @@
-import logging
+# import uvicorn # debug
 import re
 from datetime import date, datetime, time, timedelta
 
@@ -8,18 +8,19 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.models import Availability, RoomAvailability, RoomBooking
+from .models import Availability, RoomAvailability, RoomBooking
 
 app = FastAPI()
-logging.basicConfig(level=logging.DEBUG)
 
-# app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html")
+    return templates.TemplateResponse(
+        request=request, name="index.html", context={"datetime": datetime}
+    )
 
 
 @app.get("/availability", response_class=HTMLResponse)
@@ -28,7 +29,7 @@ async def availability(
     start_date: date,
     end_date: date,
     min_room_size: int = 50,
-    min_availability_duration: timedelta = timedelta(hours=1),
+    min_availability_duration: int = 60,
     start_time: time = time(hour=19),
     end_time: time = time(hour=00),
 ):
@@ -36,13 +37,18 @@ async def availability(
     for day in range((end_date - start_date).days + 1):
         date = start_date + timedelta(days=day)
         room_bookings_per_date[date] = await get_quickstudio_bookings(date)
-    print(room_bookings_per_date)
 
     room_availabilities_per_date = {}
     for date, room_bookings in room_bookings_per_date.items():
-        room_availabilities = compute_room_availability(
-            room_bookings, min_availability_duration, start_time, end_time
-        )
+        room_availabilities = [
+            compute_room_availability(
+                room_bookings,
+                timedelta(minutes=min_availability_duration),
+                start_time,
+                end_time,
+            )
+            for room_bookings in room_bookings
+        ]
         room_availabilities_per_date[date] = [
             room_availability
             for room_availability in room_availabilities
@@ -64,7 +70,7 @@ async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.get(
             "https://www.quickstudio.com/en/studios/hf-music-studio-14/bookings",
-            params={"date": date},
+            params={"date": date.isoformat()},
             headers={"Accept": "application/json"},  # Force JSON response
         )
 
@@ -85,13 +91,25 @@ def compute_room_availability(
             room_booking.open, start_time, tzinfo=room_booking.open.tzinfo
         ),
     )
-    closing_time = min(
-        room_booking.close,
-        datetime.combine(room_booking.open, end_time, tzinfo=room_booking.open.tzinfo),
-    )
+    if end_time == time(hour=0):
+        closing_time = min(
+            room_booking.close,
+            datetime.combine(
+                room_booking.open + timedelta(days=1),
+                end_time,
+                tzinfo=room_booking.open.tzinfo,
+            ),
+        )
+    else:
+        closing_time = min(
+            room_booking.close,
+            datetime.combine(
+                room_booking.open, end_time, tzinfo=room_booking.open.tzinfo
+            ),
+        )
 
-    print(f"Opening time: {opening_time}")
-    print(f"Closing time: {closing_time}")
+    # Sort bookings by chronological order
+    room_booking.bookings.sort(key=lambda x: x.start)
 
     for booking in room_booking.bookings:
         if booking.start > opening_time:
@@ -121,3 +139,8 @@ def _strip_room_name(room_name: str) -> str:
         return m.group(1)
     else:
         return room_name
+
+
+# debug
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="0.0.0.0", port=8000)
