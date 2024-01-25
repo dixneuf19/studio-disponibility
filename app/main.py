@@ -110,7 +110,7 @@ async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
     if date in cache:
         return cache[date]
 
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         response = await client.get(
             BOOKING_URL,
             params={"date": date.isoformat()},
