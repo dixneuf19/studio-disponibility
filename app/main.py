@@ -3,10 +3,11 @@ import asyncio
 import os
 import re
 from datetime import date, datetime, time, timedelta
+from typing import Annotated
 
 import httpx
 from cachetools import TTLCache
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -42,6 +43,7 @@ async def availability(
     request: Request,
     start_date: date,
     end_date: date,
+    days_of_week: Annotated[list[int], Query()] = [1, 2, 3, 4, 5, 6, 7],
     min_room_size: int = 50,
     min_availability_duration: int = 60,
     start_time: time = time(hour=19),
@@ -49,6 +51,10 @@ async def availability(
 ):
     tasks = []
     for day in range((end_date - start_date).days + 1):
+        current_date = start_date + timedelta(days=day)
+        if current_date.isoweekday() not in days_of_week:
+            continue
+        # Your existing code for each weekday goes here
         date = start_date + timedelta(days=day)
         task = asyncio.create_task(
             get_studio_availability(
@@ -110,7 +116,7 @@ async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
     if date in cache:
         return cache[date]
 
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         response = await client.get(
             BOOKING_URL,
             params={"date": date.isoformat()},
