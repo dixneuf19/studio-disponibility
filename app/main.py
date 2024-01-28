@@ -50,7 +50,6 @@ async def availability(
     end_time: time = time(hour=00),
 ):
     tasks = []
-    print(days_of_week)
     for day in range((end_date - start_date).days + 1):
         current_date = start_date + timedelta(days=day)
         if current_date.isoweekday() not in days_of_week:
