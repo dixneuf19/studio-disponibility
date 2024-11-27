@@ -5,19 +5,13 @@ import re
 from datetime import date, datetime, time, timedelta
 from typing import Annotated
 
-import httpx
 from cachetools import TTLCache
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .models import Availability, RoomAvailability, RoomBooking
-
-CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))  # 5 minutes
-BOOKING_URL = os.getenv(
-    "BOOKING_URL", "https://www.quickstudio.com/en/studios/hf-music-studio-14/bookings"
-)
+from .quickstudioapi import Availability, RoomAvailability, RoomBooking, get_quickstudio_bookings
 
 app = FastAPI()
 
@@ -74,7 +68,7 @@ async def availability(
         for date, availabilities in room_availabilities
         if len(availabilities) > 0
     }
-    
+
     return templates.TemplateResponse(
         request=request,
         name="availabilities.html",
@@ -111,30 +105,6 @@ async def get_studio_availability(
     ]
 
     return date, filtered_room_availabilities
-
-
-cache = TTLCache(maxsize=100, ttl=CACHE_TTL)  # 5 minutes
-
-
-async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
-    # Check if the bookings for the given date are already in the cache
-    if date in cache:
-        return cache[date]
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.get(
-            BOOKING_URL,
-            params={"date": date.isoformat()},
-            headers={"Accept": "application/json"},  # Force JSON response
-        )
-
-    response.raise_for_status()
-    bookings = [RoomBooking(**room) for room in response.json()]
-
-    # Store the bookings in the cache
-    cache[date] = bookings
-
-    return bookings
 
 
 def compute_room_availability(
