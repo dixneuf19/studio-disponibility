@@ -54,7 +54,6 @@ async def availability(
         current_date = start_date + timedelta(days=day)
         if current_date.isoweekday() not in days_of_week:
             continue
-        # Your existing code for each weekday goes here
         date = start_date + timedelta(days=day)
         task = asyncio.create_task(
             get_studio_availability(
@@ -69,7 +68,13 @@ async def availability(
 
     room_availabilities = await asyncio.gather(*tasks)
 
-    room_availabilities_per_date = dict(room_availabilities)
+    # remove date with no availabilities
+    room_availabilities_per_date = {
+        date: availabilities
+        for date, availabilities in room_availabilities
+        if len(availabilities) > 0
+    }
+    
     return templates.TemplateResponse(
         request=request,
         name="availabilities.html",
