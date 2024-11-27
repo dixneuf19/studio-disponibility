@@ -3,7 +3,7 @@ name = "studio-availability"
 version = "0.1.0"
 description = "Add your description here"
 authors = [
-    { name = "Julen Dixneuf", email = "julend@padok.fr" }
+    { name = "Julen Dixneuf", email = "julen.dixneuf@gmail.com" },
 ]
 dependencies = [
     "fastapi>=0.109.0",
@@ -15,22 +15,8 @@ dependencies = [
 readme = "README.md"
 requires-python = ">= 3.8"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.rye]
-managed = true
+[tool.uv]
 dev-dependencies = [
-    "black>=23.12.1",
     "ruff>=0.1.13",
-    "isort>=5.13.2",
     "pyright>=1.1.345",
 ]
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
-# https://github.com/pypa/hatch/pull/1135
-[tool.hatch.build.targets.wheel]
-bypass-selection = true

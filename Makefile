@@ -11,29 +11,26 @@ SUPPORTED_PLATFORMS=linux/amd64,linux/arm64
 all: dev
 
 install:
-	rye sync --no-dev
+	uv sync --no-dev
 
 install-dev:
-	rye sync
+	uv sync
 
 install-ci:
-	rye sync --no-lock
+	uv sync --no-lock
 
 dev:
-	rye run uvicorn ${PACKAGE_NAME}.main:app --reload
+	uv run uvicorn ${PACKAGE_NAME}.main:app --reload
 
 format:
-	rye run isort .
-	rye run black .
+	uv run ruff format
 
 check-format:
-	rye run isort --check .
-	rye run black --check .
-	rye run ruff .
-	rye run pyright
+	uv run ruff check .
+	uv run pyright
 
-test:
-	rye run pytest --cov=${PACKAGE_NAME} --cov-report=xml tests
+# test:
+# 	uv run pytest --cov=${PACKAGE_NAME} --cov-report=xml tests
 
 build:
 	docker buildx build --platform ${SUPPORTED_PLATFORMS} -t $(DOCKER_IMAGE_PATH) . 
@@ -43,6 +40,3 @@ docker-run: build
 
 push:
 	docker buildx build --platform ${SUPPORTED_PLATFORMS} -t $(DOCKER_IMAGE_PATH) . --push
-
-secret:
-	kubectl create secret generic studio-availability --from-env-file=.env
