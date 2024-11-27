@@ -1,65 +1,102 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
+    <meta charset="UTF-8">
     <title>Studio Availability</title>
     <link id="favicon" rel="icon" type="image/x-icon" href="static/favicon.ico">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.5.0/dist/semantic.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <script src="https://unpkg.com/htmx.org/dist/htmx.js"></script>
+    <style>
+        :root {
+            --pico-spacing: 0.8rem;
+        }
+
+        @media (min-width: 768px) {
+            #days-of-week-grid {
+                grid-template-columns: repeat(3, 1fr);
+                grid-column-gap: 0px;
+                grid-row-gap: 0px;
+            }
+        }
+    </style>
 </head>
 
 <body>
-    <div class="ui container">
-        <h1>Studio Availability</h1> <!-- Added h1 title -->
-        <form id="availabilityForm" hx-get="/availability" hx-target="#result" class="ui form">
-            <div class="two fields">
-                <div class="field">
-                    <label for="startDate">Start Date:</label>
+    <main class="container">
+        <h1>Studio Availability</h1>
+
+        <form id="availabilityForm" hx-get="/availability" hx-target="#result">
+            <div class="grid">
+                <div>
+                    <label for="startDate">Start Date</label>
                     <input type="date" id="startDate" name="start_date" value="{{ datetime.now().strftime('%Y-%m-%d') }}">
                 </div>
-                <div class="field">
-                    <label for="endDate">End Date:</label>
+                <div>
+                    <label for="endDate">End Date</label>
                     <input type="date" id="endDate" name="end_date" value="{{ datetime.now().strftime('%Y-%m-%d') }}">
                 </div>
-            </div>
-            <div class="field">
-                <label for="daysOfWeek">Days of the Week:</label>
-                <select multiple id="daysOfWeek" name="days_of_week">
-                    <option selected value="1">Monday</option>
-                    <option selected value="2">Tuesday</option>
-                    <option selected value="3">Wednesday</option>
-                    <option selected value="4">Thursday</option>
-                    <option selected value="5">Friday</option>
-                    <option selected value="6">Saturday</option>
-                    <option selected value="7">Sunday</option>
-                </select>
-            <!-- </div> -->
-            <div class="two fields">
-                <div class="field">
-                    <label for="startTime">Start Time:</label>
+                <div>
+                    <label for="startTime">Start Time</label>
                     <input type="time" id="startTime" name="start_time" value="19:00">
                 </div>
-                
-                <div class="field">
-                    <label for="endTime">End Time:</label>
+                <div>
+                    <label for="endTime">End Time</label>
                     <input type="time" id="endTime" name="end_time" value="00:00">
                 </div>
             </div>
-            <div class="two fields">
-                <div class="field">
-                    <label for="minRoomSize">Minimum Room Size m²:</label>
+            <fieldset>
+                <legend>Days of the Week</legend>
+                <div class="grid" id="days-of-week-grid">
+                    <label>
+                        <input type="checkbox" name="days_of_week" value="1" checked>
+                        Monday
+                    </label>
+                    <label>
+                        <input type="checkbox" name="days_of_week" value="2" checked>
+                        Tuesday
+                    </label>
+                    <label>
+                        <input type="checkbox" name="days_of_week" value="3" checked>
+                        Wednesday
+                    </label>
+                    <label>
+                        <input type="checkbox" name="days_of_week" value="4" checked>
+                        Thursday
+                    </label>
+                    <label>
+                        <input type="checkbox" name="days_of_week" value="5" checked>
+                        Friday
+                    </label>
+                    <label>
+                        <input type="checkbox" name="days_of_week" value="6" checked>
+                        Saturday
+                    </label>
+                    <label>
+                        <input type="checkbox" name="days_of_week" value="7" checked>
+                        Sunday
+                    </label>
+                </div>
+            </fieldset>
+
+
+            <div class="grid">
+
+                <div>
+                    <label for="minRoomSize">Minimum Room Size (m²)</label>
                     <input type="number" id="minRoomSize" name="min_room_size" value="50">
                 </div>
-                
-                <div class="field">
-                    <label for="minAvailabilityDuration">Minimum Availability Duration in minutes</label>
+                <div>
+                    <label for="minAvailabilityDuration">Minimum Duration (minutes)</label>
                     <input type="number" id="minAvailabilityDuration" name="min_availability_duration" value="60">
                 </div>
             </div>
-            <button type="submit" class="ui button">Submit</button>
+
+            <button type="submit">Check Availability</button>
         </form>
+
         <div id="result"></div>
-    </div>
+    </main>
 </body>
 
 </html>
