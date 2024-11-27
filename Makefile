@@ -5,7 +5,7 @@ DOCKER_REPOSITERY=ghcr.io/dixneuf19
 IMAGE_NAME=studio-availability
 IMAGE_TAG=$(shell git rev-parse --short HEAD)
 DOCKER_IMAGE_PATH=$(DOCKER_REPOSITERY)/$(IMAGE_NAME):$(IMAGE_TAG)
-SUPPORTED_PLATFORMS=linux/amd64,linux/arm64
+SUPPORTED_PLATFORMS=linux/amd64
 
 # Default target
 all: dev
@@ -33,7 +33,7 @@ check-format:
 # 	uv run pytest --cov=${PACKAGE_NAME} --cov-report=xml tests
 
 build:
-	docker buildx build --platform ${SUPPORTED_PLATFORMS} -t $(DOCKER_IMAGE_PATH) . 
+	docker build --platform ${SUPPORTED_PLATFORMS} -t $(DOCKER_IMAGE_PATH) . 
 
 docker-run: build
 	docker run -p 8000:80 --env-file=.env $(DOCKER_IMAGE_PATH)

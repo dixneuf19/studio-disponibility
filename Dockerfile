@@ -1,15 +1,28 @@
-FROM python:3.12-slim
+# https://github.com/astral-sh/uv-docker-example
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
-COPY ./pyproject.toml ./requirements.lock ./
-RUN sed '/-e file:./d' requirements.lock > requirements.txt
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r /requirements.txt
+WORKDIR /app
 
-COPY ./app /app
-COPY ./templates ./templates
-COPY ./static ./static
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-dev
 
-ENTRYPOINT ["uvicorn", "app.main:app" , "--host", "0.0.0.0", "--port", "80"]
+ADD . /app
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+
+FROM python:3.13-slim-bookworm
+
+WORKDIR /app
+
+COPY --from=builder --chown=app:app /app /app
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+CMD ["uvicorn", "app.main:app" , "--host", "0.0.0.0", "--port", "80"]
