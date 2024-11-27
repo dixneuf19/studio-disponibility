@@ -19,18 +19,39 @@
                 grid-row-gap: 0px;
             }
         }
+
+        @media (min-width: 768px) {
+            #room-availabilities-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (min-width: 1024px) {
+            #room-availabilities-grid {
+                grid-template-columns: repeat(5, 1fr);
+            }
+        }
+
+        .prewrap {
+            white-space: pre-wrap;
+        }
+
+        .centered {
+            text-align: center;
+        }
     </style>
 </head>
 
 <body>
     <main class="container">
-        <h1>Studio Availability</h1>
+        <h1 class="centered">Studio Availability</h1>
 
         <form id="availabilityForm" hx-get="/availability" hx-target="#result">
             <div class="grid">
                 <div>
                     <label for="startDate">Start Date</label>
-                    <input type="date" id="startDate" name="start_date" value="{{ datetime.now().strftime('%Y-%m-%d') }}">
+                    <input type="date" id="startDate" name="start_date"
+                        value="{{ datetime.now().strftime('%Y-%m-%d') }}">
                 </div>
                 <div>
                     <label for="endDate">End Date</label>
