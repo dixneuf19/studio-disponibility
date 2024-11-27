@@ -7,6 +7,8 @@
     <link id="favicon" rel="icon" type="image/x-icon" href="static/favicon.ico">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <script src="https://unpkg.com/htmx.org/dist/htmx.js"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/loading-states.js"></script>
+
     <style>
         :root {
             --pico-spacing: 0.8rem;
@@ -42,7 +44,7 @@
     </style>
 </head>
 
-<body>
+<body hx-ext="loading-states">
     <main class="container">
         <h1 class="centered">Studio Availability</h1>
 
@@ -113,9 +115,8 @@
                 </div>
             </div>
 
-            <button type="submit">Check Availability</button>
+            <button data-loading-aria-busy type="submit">Check Availability</button>
         </form>
-
         <div id="result"></div>
     </main>
 </body>
