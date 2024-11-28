@@ -1,6 +1,6 @@
 {
   "extends": [
-    "config:base",
+    "config:recommended",
     ":dependencyDashboard",
     ":automergeMinor",
     ":automergeBranch",
@@ -8,8 +8,10 @@
   ],
   "packageRules": [
     {
-      "matchPackagePatterns": ["python"],
-      "automerge": false
+      "automerge": false,
+      "matchPackageNames": [
+        "/python/"
+      ]
     }
   ]
 }
