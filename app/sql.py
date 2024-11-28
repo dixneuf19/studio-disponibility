@@ -56,7 +56,7 @@ class Booking(SQLModel, table=True):
 
 
 def convert_quickstudio_response(
-    studio_name: str, room_bookings: list[RoomBooking]
+    studio: Studio, room_bookings: list[RoomBooking]
 ) -> Tuple[list[Room], list[Band], list[Booking]]:
     rooms = set()
     bands = set()
@@ -69,7 +69,7 @@ def convert_quickstudio_response(
             size=rb.size,
             open=rb.open,
             close=rb.close,
-            studio_name=studio_name,
+            studio_name=studio.name,
         )
         rooms.add(room)
         for booking in rb.bookings:
@@ -100,21 +100,23 @@ def convert_quickstudio_response(
     return (list(rooms), list(bands), bookings)
 
 
-async def refresh_bookings(studio_name: str, date: date):
+async def refresh_bookings(studio: Studio, date: date):
     room_bookings = await get_quickstudio_bookings(date)
-    rooms, bands, bookings = convert_quickstudio_response(studio_name, room_bookings)
+    rooms, bands, bookings = convert_quickstudio_response(studio, room_bookings)
     start_of_day = datetime.combine(date, time(hour=0, minute=0, second=0))
     end_of_day = datetime.combine(date, time(hour=23, minute=59, second=59))
     with Session(engine) as session:
+        for room in rooms:
+            session.merge(room)
+        for band in bands:
+            session.merge(band)
+
         statement = (
             delete(Booking)
             .where(Booking.start >= start_of_day)  # type: ignore[arg-type]
             .where(Booking.start <= end_of_day)  # type: ignore[arg-type]
         )
         session.exec(statement)  # type: ignore[arg-type]
-
-        session.add_all(rooms)
-        session.add_all(bands)
         session.add_all(bookings)
 
         session.commit()
@@ -130,14 +132,13 @@ async def main():
             session.add(hf14)
 
             session.commit()
+            session.refresh(hf14)  # necessary to use the object later
     except IntegrityError:
         print("Studio already created")
 
     current_date = datetime.today().date()
 
-    # TODO: handle this transient error
-    # sqlalchemy.orm.exc.DetachedInstanceError: Instance <Studio at 0x76e97360f660> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)
-    await refresh_bookings(hf14.name, current_date)
+    await refresh_bookings(hf14, current_date)
 
 
 if __name__ == "__main__":
