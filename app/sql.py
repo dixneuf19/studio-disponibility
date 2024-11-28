@@ -1,18 +1,13 @@
 from datetime import datetime, date, time
 
 from sqlmodel import SQLModel, Field, Relationship, create_engine, Session
-from sqlalchemy import delete
+from sqlalchemy import delete, Engine
 from sqlalchemy.exc import IntegrityError
-from quickstudioapi import RoomBooking, get_quickstudio_bookings
+from .quickstudioapi import RoomBooking, get_quickstudio_bookings
 
 from typing import Tuple
 
 import asyncio
-
-sqlite_file_name = "database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
-
-engine = create_engine(sqlite_url, echo=True)
 
 
 class Room(SQLModel, table=True):
@@ -100,11 +95,12 @@ def convert_quickstudio_response(
     return (list(rooms), list(bands), bookings)
 
 
-async def refresh_bookings(studio: Studio, date: date):
+async def refresh_bookings(engine: Engine, studio: Studio, date: date):
     room_bookings = await get_quickstudio_bookings(date)
     rooms, bands, bookings = convert_quickstudio_response(studio, room_bookings)
     start_of_day = datetime.combine(date, time(hour=0, minute=0, second=0))
     end_of_day = datetime.combine(date, time(hour=23, minute=59, second=59))
+
     with Session(engine) as session:
         for room in rooms:
             session.merge(room)
@@ -122,8 +118,18 @@ async def refresh_bookings(studio: Studio, date: date):
         session.commit()
 
 
-async def main():
+def init_db(sqlite_url: str, debug: bool = False) -> Engine:
+    engine = create_engine(sqlite_url, echo=debug)
     SQLModel.metadata.create_all(engine)
+
+    return engine
+
+
+async def main():
+    sqlite_file_name = "database.db"
+    sqlite_url = f"sqlite:///{sqlite_file_name}"
+
+    engine = init_db(sqlite_url, debug=True)
 
     hf14 = Studio(name="hf-music-studio-14")
 
@@ -138,7 +144,7 @@ async def main():
 
     current_date = datetime.today().date()
 
-    await refresh_bookings(hf14, current_date)
+    await refresh_bookings(engine, hf14, current_date)
 
 
 if __name__ == "__main__":

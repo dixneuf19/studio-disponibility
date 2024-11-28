@@ -3,6 +3,7 @@ import asyncio
 import re
 from datetime import date, datetime, time, timedelta
 from typing import Annotated
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse
@@ -15,8 +16,28 @@ from .quickstudioapi import (
     RoomBooking,
     get_quickstudio_bookings,
 )
+from .sql import init_db, refresh_bookings, Studio
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load the ML model
+    sqlite_file_name = "database.db"
+    sqlite_url = f"sqlite:///{sqlite_file_name}"
+    app.state.engine = init_db(sqlite_url)
+
+    # TODO: Refresh data for a bigger range
+    current_date = datetime.today().date()
+
+    app.state.STUDIOS = [Studio(name="hf-14")]
+
+    for studio in app.state.STUDIOS:
+        await refresh_bookings(app.state.engine, studio, current_date)
+        yield
+    # Add shutdown tasks if necessary
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/health")
