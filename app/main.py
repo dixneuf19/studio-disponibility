@@ -1,17 +1,20 @@
 # import uvicorn # debug
 import asyncio
-import os
 import re
 from datetime import date, datetime, time, timedelta
 from typing import Annotated
 
-from cachetools import TTLCache
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .quickstudioapi import Availability, RoomAvailability, RoomBooking, get_quickstudio_bookings
+from .quickstudioapi import (
+    Availability,
+    RoomAvailability,
+    RoomBooking,
+    get_quickstudio_bookings,
+)
 
 app = FastAPI()
 

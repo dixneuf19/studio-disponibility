@@ -3,26 +3,28 @@ from typing import Optional
 from cachetools import TTLCache
 import httpx
 import os
+from sqlmodel import SQLModel
+
 BOOKING_URL = os.getenv(
     "BOOKING_URL", "https://www.quickstudio.com/en/studios/hf-music-studio-14/bookings"
 )
 CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))  # 5 minutes
 
-from pydantic import BaseModel
 
-
-class Band(BaseModel):
+class Band(SQLModel):
     id: int
     name: str
 
-class Booking(BaseModel):
+
+class Booking(SQLModel):
     type: int
     start: datetime
     end: datetime
     band: Optional[Band]
 
 
-class RoomBooking(BaseModel):
+class RoomBooking(SQLModel):
+    id: int
     name: str
     description: str
     size: int
@@ -31,7 +33,7 @@ class RoomBooking(BaseModel):
     bookings: list[Booking]
 
 
-class Availability(BaseModel):
+class Availability(SQLModel):
     start: datetime
     end: datetime
 
@@ -40,13 +42,15 @@ class Availability(BaseModel):
         return self.end - self.start
 
 
-class RoomAvailability(BaseModel):
+class RoomAvailability(SQLModel):
     name: str
     date: datetime
     size: int
     availabilities: list[Availability]
 
+
 cache = TTLCache(maxsize=100, ttl=CACHE_TTL)  # 5 minutes
+
 
 async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
     # Check if the bookings for the given date are already in the cache

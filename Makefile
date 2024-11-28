@@ -24,6 +24,7 @@ dev:
 
 format:
 	uv run ruff format
+	uv run ruff check --fix
 
 check-format:
 	uv run ruff check .

@@ -193,3 +193,9 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python,git,direnv
+
+# used for testing
+res.json 
+
+# any local sqlite database
+*.db
