@@ -1,13 +1,20 @@
-from datetime import datetime, date, time
-
-from sqlmodel import SQLModel, Field, Relationship, create_engine, Session
-from sqlalchemy import delete, Engine
-from sqlalchemy.exc import IntegrityError
-from .quickstudioapi import RoomBooking, get_quickstudio_bookings
-
+import asyncio
+from datetime import date as dt_date
+from datetime import datetime, time, timedelta
 from typing import Tuple
 
-import asyncio
+from sqlalchemy import Engine
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import (
+    Field,
+    Relationship,
+    Session,
+    SQLModel,
+    create_engine,
+    select,
+)
+
+from .quickstudioapi import RoomBooking, get_quickstudio_bookings
 
 
 class Room(SQLModel, table=True):
@@ -15,10 +22,11 @@ class Room(SQLModel, table=True):
     name: str = Field(index=True)
     description: str
     size: int
-    open: datetime
-    close: datetime
+    open: time
+    close: time
 
-    studio_name: str = Field(foreign_key="studio.name")
+    studio_name: str = Field(foreign_key="studio.name", index=True)
+    studio: "Studio" = Relationship(back_populates="rooms")
 
     def __hash__(self):
         return hash(self.id)
@@ -26,7 +34,7 @@ class Room(SQLModel, table=True):
 
 class Studio(SQLModel, table=True):
     name: str = Field(primary_key=True)
-    # rooms: list[Room] | None = Relationship(back_populates="studio")
+    rooms: list[Room] | None = Relationship(back_populates="studio")
 
 
 class Band(SQLModel, table=True):
@@ -40,8 +48,11 @@ class Band(SQLModel, table=True):
 class Booking(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     type: int
-    start: datetime
-    end: datetime
+
+    # with this representation, we assume that you cannot have a booking on several days
+    date: dt_date = Field(index=True)
+    start: time
+    end: time  # special case for 0h00m, which is the start of next date
 
     band_id: int = Field(foreign_key="band.id")
     band: Band = Relationship()
@@ -62,8 +73,8 @@ def convert_quickstudio_response(
             name=rb.name,
             description=rb.description,
             size=rb.size,
-            open=rb.open,
-            close=rb.close,
+            open=rb.open.time(),
+            close=rb.close.time(),
             studio_name=studio.name,
         )
         rooms.add(room)
@@ -76,11 +87,25 @@ def convert_quickstudio_response(
                         )
                     band = Band(id=booking.band.id, name=booking.band.name)
                     bands.add(band)
+
+                    if booking.start.date() != booking.end.date():
+                        # we expect that a booking cannot cross over several days
+                        # one exception: ends at midnight
+                        if not (
+                            booking.end.time() == time(hour=0)
+                            and booking.end.date()
+                            == booking.start.date() + timedelta(days=1)
+                        ):
+                            raise Exception(
+                                f"booking {booking} spans several days which is not expected"
+                            )
+
                     bookings.append(
                         Booking(
                             type=booking.type,
-                            start=booking.start,
-                            end=booking.end,
+                            date=booking.start.date(),
+                            start=booking.start.time(),
+                            end=booking.end.time(),
                             band_id=band.id,
                             room_id=room.id,
                         )
@@ -95,11 +120,9 @@ def convert_quickstudio_response(
     return (list(rooms), list(bands), bookings)
 
 
-async def refresh_bookings(engine: Engine, studio: Studio, date: date):
+async def refresh_bookings(engine: Engine, studio: Studio, date: dt_date):
     room_bookings = await get_quickstudio_bookings(date)
     rooms, bands, bookings = convert_quickstudio_response(studio, room_bookings)
-    start_of_day = datetime.combine(date, time(hour=0, minute=0, second=0))
-    end_of_day = datetime.combine(date, time(hour=23, minute=59, second=59))
 
     with Session(engine) as session:
         for room in rooms:
@@ -107,15 +130,30 @@ async def refresh_bookings(engine: Engine, studio: Studio, date: date):
         for band in bands:
             session.merge(band)
 
-        statement = (
-            delete(Booking)
-            .where(Booking.start >= start_of_day)  # type: ignore[arg-type]
-            .where(Booking.start <= end_of_day)  # type: ignore[arg-type]
-        )
-        session.exec(statement)  # type: ignore[arg-type]
+
+        # TODO: this could be somewhat improved with a DELETE query using sqlite
+        # However, sqlite + sqlalchemy does not seem to easily support DELETE + JOIN query
+        stale_bookings = get_bookings(engine, studio, date)
+        for sb in stale_bookings:
+            session.delete(sb)
+
         session.add_all(bookings)
 
         session.commit()
+
+
+def get_bookings(engine: Engine, studio: Studio, date: dt_date) -> list[Booking]:
+    with Session(engine) as session:
+        statement = (
+            select(Booking)
+            .where(Booking.date == date)
+            .join(Room)
+            .where(Room.studio_name == studio.name)
+        )
+        results = session.exec(statement)
+
+        # TODO: is this the good way to convert from sequence to list
+        return list(results.all())
 
 
 def init_db(sqlite_url: str, debug: bool = False) -> Engine:
