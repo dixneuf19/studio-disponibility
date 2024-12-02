@@ -14,7 +14,6 @@ from sqlmodel import SQLModel, Session
 from .sql import (
     Booking,
     Studio,
-    StudioDataCache,
     get_bookings,
     init_db,
     refresh_bookings,
@@ -103,21 +102,7 @@ async def availability(
 
             date = start_date + timedelta(days=day)
 
-            last_data_pull = session.get(
-                StudioDataCache, {"studio_name": studio.name, "date": date}
-            )
-            if (
-                not last_data_pull
-                or last_data_pull.last_refresh < Datetime.now() - timedelta(minutes=5)
-            ):
-                await refresh_bookings(session, studio, date)
-                session.merge(
-                    StudioDataCache(
-                        studio_name=studio.name, date=date, last_refresh=Datetime.now()
-                    )
-                )
-
-            bookings = get_bookings(session, studio, date)
+            bookings = await get_bookings(session, studio, date)
 
             room_availabilities_per_date[date] = _compute_room_availabilities(
                 studio,

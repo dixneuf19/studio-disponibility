@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import date as dt_date
 from datetime import datetime, time, timedelta
 from typing import Tuple
@@ -15,6 +16,8 @@ from sqlmodel import (
 )
 
 from .quickstudioapi import RoomBooking, get_quickstudio_bookings
+
+DATA_STALE_MINUTES = int(os.getenv("DATA_STALE_MINUTES", 15))
 
 
 class Room(SQLModel, table=True):
@@ -126,28 +129,7 @@ def convert_quickstudio_response(
     return (list(rooms), list(bands), bookings)
 
 
-async def refresh_bookings(session: Session, studio: Studio, date: dt_date):
-    room_bookings = await get_quickstudio_bookings(date)
-    rooms, bands, bookings = convert_quickstudio_response(studio, room_bookings)
-
-    for room in rooms:
-        session.merge(room)
-    for band in bands:
-        session.merge(band)
-
-    # TODO: this could be somewhat improved with a DELETE query using sqlite
-    # However, sqlite + sqlalchemy does not seem to easily support DELETE + JOIN query
-    stale_bookings = get_bookings(session, studio, date)
-    for sb in stale_bookings:
-        session.delete(sb)
-
-    session.add_all(bookings)
-
-    session.commit()
-
-
-# TODO: fetch data from remote before sending the response
-def get_bookings(session: Session, studio: Studio, date: dt_date) -> list[Booking]:
+def _get_bookings(session: Session, studio: Studio, date: dt_date) -> list[Booking]:
     statement = (
         select(Booking)
         .where(Booking.date == date)
@@ -159,6 +141,49 @@ def get_bookings(session: Session, studio: Studio, date: dt_date) -> list[Bookin
     # TODO: is this the good way to convert from sequence to list
     bookings = results.all()
     return list(bookings)
+
+
+async def refresh_bookings(session: Session, studio: Studio, date: dt_date):
+    room_bookings = await get_quickstudio_bookings(date)
+    rooms, bands, bookings = convert_quickstudio_response(studio, room_bookings)
+
+    for room in rooms:
+        session.merge(room)
+    for band in bands:
+        session.merge(band)
+
+    # TODO: this could be somewhat improved with a DELETE query using sqlite
+    # However, sqlite + sqlalchemy does not seem to easily support DELETE + JOIN query
+    stale_bookings = _get_bookings(session, studio, date)
+    for sb in stale_bookings:
+        session.delete(sb)
+
+    session.add_all(bookings)
+
+    session.commit()
+
+
+async def get_bookings(
+    session: Session, studio: Studio, date: dt_date
+) -> list[Booking]:
+    # First, check if we have already fresh data for this date
+    last_data_pull = session.get(
+        StudioDataCache, {"studio_name": studio.name, "date": date}
+    )
+
+    # if no data or stale, refresh it
+    if not last_data_pull or last_data_pull.last_refresh < datetime.now() - timedelta(
+        minutes=DATA_STALE_MINUTES
+    ):
+        await refresh_bookings(session, studio, date)
+        session.merge(
+            StudioDataCache(
+                studio_name=studio.name, date=date, last_refresh=datetime.now()
+            )
+        )
+
+    # return data which is necessarily fresh
+    return _get_bookings(session, studio, date)
 
 
 def init_db(sqlite_url: str, debug: bool = False) -> Engine:
