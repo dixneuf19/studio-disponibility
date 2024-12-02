@@ -1,25 +1,60 @@
-# import uvicorn # debug
-import asyncio
-import os
+# import uvicorn  # debug
 import re
-from datetime import date, datetime, time, timedelta
+from contextlib import asynccontextmanager
+from datetime import datetime as Datetime, date as Date, time as Time, timedelta
+from itertools import groupby
 from typing import Annotated
 
-import httpx
-from cachetools import TTLCache
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Query, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlmodel import SQLModel, Session
 
-from .models import Availability, RoomAvailability, RoomBooking
-
-CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))  # 5 minutes
-BOOKING_URL = os.getenv(
-    "BOOKING_URL", "https://www.quickstudio.com/en/studios/hf-music-studio-14/bookings"
+from .sql import (
+    Booking,
+    Studio,
+    get_bookings,
+    init_db,
+    refresh_bookings,
 )
 
-app = FastAPI()
+STUDIO_NAMES = ["hf-14"]
+
+
+class RoomAvailability(SQLModel):
+    room_name: str
+    date: Date
+    start: Datetime
+    end: Datetime
+
+    @property
+    def duration(self) -> timedelta:
+        return self.end - self.start
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load the ML model
+    sqlite_file_name = "database.db"
+    sqlite_url = f"sqlite:///{sqlite_file_name}"
+    app.state.engine = init_db(sqlite_url)
+
+    # TODO: Refresh data for a bigger range
+    current_date = Datetime.today().date()
+
+    for studio_name in STUDIO_NAMES:
+        with Session(app.state.engine) as session:
+            studio = Studio(name=studio_name)
+            session.merge(studio)
+            session.commit()
+            await refresh_bookings(session, studio, current_date)
+
+    yield
+    # Add shutdown tasks if necessary
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/health")
@@ -34,163 +69,151 @@ templates = Jinja2Templates(directory="templates")
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse(
-        request=request, name="index.html", context={"datetime": datetime}
+        request=request, name="index.html", context={"Datetime": Datetime}
     )
 
 
 @app.get("/availability", response_class=HTMLResponse)
 async def availability(
     request: Request,
-    start_date: date,
-    end_date: date,
+    studio_name: str,
+    start_date: Date,
+    end_date: Date,
     days_of_week: Annotated[list[int], Query()] = [1, 2, 3, 4, 5, 6, 7],
     min_room_size: int = 50,
     min_availability_duration: int = 60,
-    start_time: time = time(hour=19),
-    end_time: time = time(hour=00),
+    from_time: Time = Time(hour=19),
+    to_time: Time = Time(hour=00),
 ):
-    tasks = []
-    for day in range((end_date - start_date).days + 1):
-        current_date = start_date + timedelta(days=day)
-        if current_date.isoweekday() not in days_of_week:
-            continue
-        date = start_date + timedelta(days=day)
-        task = asyncio.create_task(
-            get_studio_availability(
-                date=date,
-                start_time=start_time,
-                end_time=end_time,
-                min_room_size=min_room_size,
-                min_availability_duration=timedelta(minutes=min_availability_duration),
+    # tasks = []
+    # TODO: use FastAPI dependency injection
+    with Session(request.app.state.engine) as session:
+        studio = session.get(Studio, studio_name)
+        if not studio:
+            raise HTTPException(
+                status_code=404, detail=f"Studio {studio_name} is not supported"
             )
+
+        room_availabilities_per_date: dict[Date, list[RoomAvailability]] = {}
+        for day in range((end_date - start_date).days + 1):
+            current_date = start_date + timedelta(days=day)
+            if current_date.isoweekday() not in days_of_week:
+                continue
+
+            date = start_date + timedelta(days=day)
+
+            bookings = await get_bookings(session, studio, date)
+
+            room_availabilities_per_date[date] = _compute_room_availabilities(
+                studio,
+                bookings,
+                date,
+                from_time,
+                to_time,
+                timedelta(minutes=min_availability_duration),
+                min_room_size,
+            )
+            # TODO: if relevant, reimplement concurrent API calls
+        #     task = asyncio.create_task(
+        #         get_studio_availability(
+        #             date=date,
+        #             start_time=start_time,
+        #             end_time=end_time,
+        #             min_room_size=min_room_size,
+        #             min_availability_duration=timedelta(minutes=min_availability_duration),
+        #         )
+        #     )
+        #     tasks.append(task)
+
+        # room_availabilities = await asyncio.gather(*tasks)
+
+        # remove date with no availabilities
+
+        return templates.TemplateResponse(
+            request=request,
+            name="availabilities.html",
+            context={
+                "room_availabilities_per_date": room_availabilities_per_date,
+                "Datetime": Datetime,
+            },
         )
-        tasks.append(task)
-
-    room_availabilities = await asyncio.gather(*tasks)
-
-    # remove date with no availabilities
-    room_availabilities_per_date = {
-        date: availabilities
-        for date, availabilities in room_availabilities
-        if len(availabilities) > 0
-    }
-    
-    return templates.TemplateResponse(
-        request=request,
-        name="availabilities.html",
-        context={
-            "room_availabilities_per_date": room_availabilities_per_date,
-            "datetime": datetime,
-        },
-    )
 
 
-async def get_studio_availability(
-    date: date,
-    start_time: time,
-    end_time: time,
-    min_room_size,
+def _get_room_id(booking: Booking) -> int:
+    return booking.room.id
+
+
+def _compute_room_availabilities(
+    studio: Studio,
+    bookings: list[Booking],
+    date: Date,
+    from_time: Time,
+    to_time: Time,
     min_availability_duration: timedelta,
-) -> tuple[date, list[RoomAvailability]]:
-    room_bookings = await get_quickstudio_bookings(date)
-
-    room_availabilities = [
-        compute_room_availability(
-            room_bookings,
-            min_availability_duration,
-            start_time,
-            end_time,
-        )
-        for room_bookings in room_bookings
-    ]
-    filtered_room_availabilities = [
-        room_availability
-        for room_availability in room_availabilities
-        if room_availability.size >= min_room_size
-        and len(room_availability.availabilities) > 0
-    ]
-
-    return date, filtered_room_availabilities
-
-
-cache = TTLCache(maxsize=100, ttl=CACHE_TTL)  # 5 minutes
-
-
-async def get_quickstudio_bookings(date: date) -> list[RoomBooking]:
-    # Check if the bookings for the given date are already in the cache
-    if date in cache:
-        return cache[date]
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.get(
-            BOOKING_URL,
-            params={"date": date.isoformat()},
-            headers={"Accept": "application/json"},  # Force JSON response
-        )
-
-    response.raise_for_status()
-    bookings = [RoomBooking(**room) for room in response.json()]
-
-    # Store the bookings in the cache
-    cache[date] = bookings
-
-    return bookings
-
-
-def compute_room_availability(
-    room_booking: RoomBooking,
-    min_availability_duration: timedelta,
-    start_time: time,
-    end_time: time,
-) -> RoomAvailability:
+    min_room_size: int,
+) -> list[RoomAvailability]:
     availabilities = []
-    opening_time = max(
-        room_booking.open,
-        datetime.combine(
-            room_booking.open, start_time, tzinfo=room_booking.open.tzinfo
-        ),
-    )
-    if end_time == time(hour=0):
-        closing_time = min(
-            room_booking.close,
-            datetime.combine(
-                room_booking.open + timedelta(days=1),
-                end_time,
-                tzinfo=room_booking.open.tzinfo,
-            ),
+
+    bookings_per_room = {
+        room_id: list(bookings_iter)
+        for room_id, bookings_iter in groupby(
+            sorted(bookings, key=_get_room_id), key=_get_room_id
         )
-    else:
-        closing_time = min(
-            room_booking.close,
-            datetime.combine(
-                room_booking.open, end_time, tzinfo=room_booking.open.tzinfo
-            ),
+    }
+
+    if studio.rooms is None:
+        return availabilities
+
+    # only consider big enough rooms
+    for room in (room for room in studio.rooms if room.size >= min_room_size):
+        start_pointer = Datetime.combine(date, max(room.open, from_time))
+        min_close = min(room.close, to_time)
+        end_pointer = Datetime.combine(
+            # if the end time is midnight, the date is next day
+            date + timedelta(days=1) if min_close == Time(hour=0) else date,
+            min_close,
         )
 
-    # Sort bookings by chronological order
-    room_booking.bookings.sort(key=lambda x: x.start)
+        # Sort bookings by chronological order
+        sorted_bookings_for_room = (
+            sorted(bookings_per_room[room.id], key=lambda x: x.start)
+            if room.id in bookings_per_room
+            else []
+        )
 
-    for booking in room_booking.bookings:
-        if booking.start > opening_time:
-            availabilities.append(Availability(start=opening_time, end=booking.start))
-        opening_time = max(booking.end, opening_time)
+        # opening_time is a moving pointer to find rooms without bookings
+        # this work because
+        for booking in sorted_bookings_for_room:
+            if Datetime.combine(booking.date, booking.start) > start_pointer:
+                availabilities.append(
+                    RoomAvailability(
+                        room_name=_strip_room_name(room.name),
+                        date=date,
+                        start=start_pointer,
+                        end=Datetime.combine(booking.date, booking.start),
+                    )
+                )
+            start_pointer = max(Datetime.combine(date, booking.end), start_pointer)
 
-    if closing_time > opening_time:
-        availabilities.append(Availability(start=opening_time, end=closing_time))
-
-    # Filter availabilities based on start_time and end_time
+        # All bookings have been considered, the rest is available
+        if end_pointer > start_pointer:
+            availabilities.append(
+                RoomAvailability(
+                    room_name=_strip_room_name(room.name),
+                    date=date,
+                    start=start_pointer,
+                    end=end_pointer,
+                )
+            )
+    # remove availabilities too shorts
     filtered_availabilities = [
         availability
         for availability in availabilities
         if (availability.end - availability.start) >= min_availability_duration
     ]
 
-    return RoomAvailability(
-        name=_strip_room_name(room_booking.name),
-        date=room_booking.open,
-        size=room_booking.size,
-        availabilities=filtered_availabilities,
-    )
+    # sort per start
+    return sorted(filtered_availabilities, key=lambda a: a.start)
 
 
 def _strip_room_name(room_name: str) -> str:
