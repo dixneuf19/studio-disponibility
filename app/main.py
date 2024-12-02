@@ -1,5 +1,6 @@
 # import uvicorn  # debug
 import re
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime as Datetime, date as Date, time as Time, timedelta
 from itertools import groupby
@@ -9,7 +10,7 @@ from fastapi import FastAPI, Query, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlmodel import SQLModel, Session
+from sqlmodel import SQLModel, Session, select
 
 from .sql import (
     Booking,
@@ -18,6 +19,8 @@ from .sql import (
     init_db,
     refresh_bookings,
 )
+
+AUTO_CACHE_SPAN_DAYS = int(os.getenv("AUTO_CACHE_SPAN_DAYS", 15))
 
 STUDIO_NAMES = ["hf-14"]
 
@@ -33,23 +36,36 @@ class RoomAvailability(SQLModel):
         return self.end - self.start
 
 
+# TODO: parametrize the database URL
+sqlite_file_name = "database.db"
+sqlite_url = f"sqlite:///{sqlite_file_name}"
+engine = init_db(sqlite_url)
+
+
+def _get_next_nth_date(span_days: int = AUTO_CACHE_SPAN_DAYS) -> list[Date]:
+    today = Datetime.today().date()
+    return [today + timedelta(days=i) for i in range(span_days)]
+
+
+async def _load_bookings_cache():
+    with Session(engine) as session:
+        studios = session.exec(select(Studio)).all()
+        for studio in studios:
+            for date in _get_next_nth_date():
+                await refresh_bookings(session, studio, date)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load the ML model
-    sqlite_file_name = "database.db"
-    sqlite_url = f"sqlite:///{sqlite_file_name}"
-    app.state.engine = init_db(sqlite_url)
-
-    # TODO: Refresh data for a bigger range
-    current_date = Datetime.today().date()
 
     for studio_name in STUDIO_NAMES:
-        with Session(app.state.engine) as session:
+        with Session(engine) as session:
             studio = Studio(name=studio_name)
             session.merge(studio)
             session.commit()
-            await refresh_bookings(session, studio, current_date)
 
+    await _load_bookings_cache()
     yield
     # Add shutdown tasks if necessary
 
@@ -87,7 +103,7 @@ async def availability(
 ):
     # tasks = []
     # TODO: use FastAPI dependency injection
-    with Session(request.app.state.engine) as session:
+    with Session(engine) as session:
         studio = session.get(Studio, studio_name)
         if not studio:
             raise HTTPException(
