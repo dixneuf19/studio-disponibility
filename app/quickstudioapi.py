@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta, date
-from typing import Optional
-from cachetools import TTLCache
-import httpx
 import os
+from datetime import date, datetime
+from typing import Optional
+
+import httpx
+from cachetools import TTLCache
 from sqlmodel import SQLModel
 
 BOOKING_URL = os.getenv(
@@ -31,22 +32,6 @@ class RoomBooking(SQLModel):
     open: datetime
     close: datetime
     bookings: list[Booking]
-
-
-class Availability(SQLModel):
-    start: datetime
-    end: datetime
-
-    @property
-    def duration(self) -> timedelta:
-        return self.end - self.start
-
-
-class RoomAvailability(SQLModel):
-    name: str
-    date: datetime
-    size: int
-    availabilities: list[Availability]
 
 
 cache = TTLCache(maxsize=100, ttl=CACHE_TTL)  # 5 minutes

@@ -120,40 +120,39 @@ def convert_quickstudio_response(
     return (list(rooms), list(bands), bookings)
 
 
-async def refresh_bookings(engine: Engine, studio: Studio, date: dt_date):
+async def refresh_bookings(session: Session, studio: Studio, date: dt_date):
     room_bookings = await get_quickstudio_bookings(date)
     rooms, bands, bookings = convert_quickstudio_response(studio, room_bookings)
 
-    with Session(engine) as session:
-        for room in rooms:
-            session.merge(room)
-        for band in bands:
-            session.merge(band)
+    for room in rooms:
+        session.merge(room)
+    for band in bands:
+        session.merge(band)
+
+    # TODO: this could be somewhat improved with a DELETE query using sqlite
+    # However, sqlite + sqlalchemy does not seem to easily support DELETE + JOIN query
+    stale_bookings = get_bookings(session, studio, date)
+    for sb in stale_bookings:
+        session.delete(sb)
+
+    session.add_all(bookings)
+
+    session.commit()
 
 
-        # TODO: this could be somewhat improved with a DELETE query using sqlite
-        # However, sqlite + sqlalchemy does not seem to easily support DELETE + JOIN query
-        stale_bookings = get_bookings(engine, studio, date)
-        for sb in stale_bookings:
-            session.delete(sb)
+# TODO: fetch data from remote before sending the response
+def get_bookings(session: Session, studio: Studio, date: dt_date) -> list[Booking]:
+    statement = (
+        select(Booking)
+        .where(Booking.date == date)
+        .join(Room)
+        .where(Room.studio_name == studio.name)
+    )
+    results = session.exec(statement)
 
-        session.add_all(bookings)
-
-        session.commit()
-
-
-def get_bookings(engine: Engine, studio: Studio, date: dt_date) -> list[Booking]:
-    with Session(engine) as session:
-        statement = (
-            select(Booking)
-            .where(Booking.date == date)
-            .join(Room)
-            .where(Room.studio_name == studio.name)
-        )
-        results = session.exec(statement)
-
-        # TODO: is this the good way to convert from sequence to list
-        return list(results.all())
+    # TODO: is this the good way to convert from sequence to list
+    bookings = results.all()
+    return list(bookings)
 
 
 def init_db(sqlite_url: str, debug: bool = False) -> Engine:
@@ -181,8 +180,8 @@ async def main():
         print("Studio already created")
 
     current_date = datetime.today().date()
-
-    await refresh_bookings(engine, hf14, current_date)
+    with Session(engine) as session:
+        await refresh_bookings(session, hf14, current_date)
 
 
 if __name__ == "__main__":

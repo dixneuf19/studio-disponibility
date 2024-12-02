@@ -1,18 +1,17 @@
 <br />
 {% for date, room_availabilities in room_availabilities_per_date.items() %}
+{# Only display the date if there are availabilities for it #}
 {% if room_availabilities %}
 <div>
     <h4 class="centered">{{ date.strftime("%A %d %B %Y") }}</h2>
         <div class="grid" id="room-availabilities-grid">
-            {% for room in room_availabilities %}
-            {% for availability in room.availabilities %}
+            {% for availability in room_availabilities %}
             <button class="secondary"
-                data-tooltip="{{ (datetime(1900, 1, 1) + availability.duration).strftime('%Hh%M') }}">
-                <p class="prewrap"><b>{{ room.name }}</b></p>
+                data-tooltip="{{ (Datetime(1900, 1, 1) + availability.duration).strftime('%Hh%M') }}">
+                <p class="prewrap"><b>{{ availability.room_name }}</b></p>
                 <p class="prewrap">{{ availability.start.strftime('%H:%M')}} - {{ availability.end.strftime('%H:%M') }}
                 </p>
             </button>
-            {% endfor %}
             {% endfor %}
         </div>
         <hr />

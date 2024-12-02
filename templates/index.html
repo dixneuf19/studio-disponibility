@@ -49,15 +49,18 @@
         <h1 class="centered">Studio Availability</h1>
 
         <form id="availabilityForm" hx-get="/availability" hx-target="#result">
+            <select id="studioName" name="studio_name" aria-label="Select studio" hidden required>
+                <option value="hf-14">HF 14</option>
+            </select>
             <div class="grid">
                 <div>
                     <label for="startDate">Start Date</label>
                     <input type="date" id="startDate" name="start_date"
-                        value="{{ datetime.now().strftime('%Y-%m-%d') }}">
+                        value="{{ Datetime.now().strftime('%Y-%m-%d') }}">
                 </div>
                 <div>
                     <label for="endDate">End Date</label>
-                    <input type="date" id="endDate" name="end_date" value="{{ datetime.now().strftime('%Y-%m-%d') }}">
+                    <input type="date" id="endDate" name="end_date" value="{{ Datetime.now().strftime('%Y-%m-%d') }}">
                 </div>
                 <div>
                     <label for="startTime">Start Time</label>
