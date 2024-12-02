@@ -11,7 +11,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import SQLModel, Session
 
-from .sql import Booking, Studio, get_bookings, init_db, refresh_bookings
+from .sql import (
+    Booking,
+    Studio,
+    StudioDataCache,
+    get_bookings,
+    init_db,
+    refresh_bookings,
+)
 
 STUDIO_NAMES = ["hf-14"]
 
@@ -96,9 +103,22 @@ async def availability(
 
             date = start_date + timedelta(days=day)
 
+            last_data_pull = session.get(
+                StudioDataCache, {"studio_name": studio.name, "date": date}
+            )
+            if (
+                not last_data_pull
+                or last_data_pull.last_refresh < Datetime.now() - timedelta(minutes=5)
+            ):
+                await refresh_bookings(session, studio, date)
+                session.merge(
+                    StudioDataCache(
+                        studio_name=studio.name, date=date, last_refresh=Datetime.now()
+                    )
+                )
+
             bookings = get_bookings(session, studio, date)
 
-            print(f"{bookings=}")
             room_availabilities_per_date[date] = _compute_room_availabilities(
                 studio,
                 bookings,
@@ -159,7 +179,6 @@ def _compute_room_availabilities(
     if studio.rooms is None:
         return availabilities
 
-    # print(f"{studio.rooms=}")
     # only consider big enough rooms
     for room in (room for room in studio.rooms if room.size >= min_room_size):
         start_pointer = Datetime.combine(date, max(room.open, from_time))
@@ -176,8 +195,6 @@ def _compute_room_availabilities(
             if room.id in bookings_per_room
             else []
         )
-
-        print(f"{sorted_bookings_for_room=}")
 
         # opening_time is a moving pointer to find rooms without bookings
         # this work because
@@ -203,7 +220,6 @@ def _compute_room_availabilities(
                     end=end_pointer,
                 )
             )
-    print(f"{availabilities=}")
     # remove availabilities too shorts
     filtered_availabilities = [
         availability

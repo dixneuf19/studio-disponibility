@@ -61,6 +61,12 @@ class Booking(SQLModel, table=True):
     room: Room = Relationship()
 
 
+class StudioDataCache(SQLModel, table=True):
+    studio_name: str = Field(primary_key=True, index=True)
+    date: dt_date = Field(primary_key=True, index=True)
+    last_refresh: datetime
+
+
 def convert_quickstudio_response(
     studio: Studio, room_bookings: list[RoomBooking]
 ) -> Tuple[list[Room], list[Band], list[Booking]]:
