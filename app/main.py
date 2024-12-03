@@ -1,5 +1,4 @@
-# import uvicorn  # debug
-import re
+import uvicorn
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime as Datetime, date as Date, time as Time, timedelta
@@ -18,6 +17,13 @@ from .sql import (
     get_bookings,
     init_db,
     refresh_bookings,
+)
+
+from utils import (
+    get_next_nth_date,
+    get_room_id,
+    strip_room_name,
+    combine_datetime_midnight_aware,
 )
 
 AUTO_CACHE_SPAN_DAYS = int(os.getenv("AUTO_CACHE_SPAN_DAYS", 15))
@@ -42,16 +48,11 @@ sqlite_url = f"sqlite:///{sqlite_file_name}"
 engine = init_db(sqlite_url)
 
 
-def _get_next_nth_date(span_days: int = AUTO_CACHE_SPAN_DAYS) -> list[Date]:
-    today = Datetime.today().date()
-    return [today + timedelta(days=i) for i in range(span_days)]
-
-
 async def _load_bookings_cache():
     with Session(engine) as session:
         studios = session.exec(select(Studio)).all()
         for studio in studios:
-            for date in _get_next_nth_date():
+            for date in get_next_nth_date(AUTO_CACHE_SPAN_DAYS):
                 await refresh_bookings(session, studio, date)
 
 
@@ -100,8 +101,6 @@ async def get_availabilities(
     days_of_week: Annotated[list[int], Query()] = [1, 2, 3, 4, 5, 6, 7],
     min_room_size: int = 50,
     min_availability_duration: int = 60,
-    from_time: Time = Time(hour=19),
-    to_time: Time = Time(hour=00),
 ):
     # tasks = []
     # TODO: use FastAPI dependency injection
@@ -157,10 +156,6 @@ async def get_availabilities(
         )
 
 
-def _get_room_id(booking: Booking) -> int:
-    return booking.room.id
-
-
 def _compute_room_availabilities(
     studio: Studio,
     bookings: list[Booking],
@@ -175,7 +170,7 @@ def _compute_room_availabilities(
     bookings_per_room = {
         room_id: list(bookings_iter)
         for room_id, bookings_iter in groupby(
-            sorted(bookings, key=_get_room_id), key=_get_room_id
+            sorted(bookings, key=get_room_id), key=get_room_id
         )
     }
 
@@ -186,8 +181,8 @@ def _compute_room_availabilities(
     for room in (room for room in studio.rooms if room.size >= min_room_size):
         start_pointer = Datetime.combine(date, max(room.open, from_time))
         end_pointer = min(
-            _combine_datetime_midnight_aware(date, to_time),
-            _combine_datetime_midnight_aware(date, room.close),
+            combine_datetime_midnight_aware(date, to_time),
+            combine_datetime_midnight_aware(date, room.close),
         )
 
         # Sort bookings by chronological order
@@ -203,23 +198,23 @@ def _compute_room_availabilities(
             if Datetime.combine(booking.date, booking.start) > start_pointer:
                 availabilities.append(
                     RoomAvailability(
-                        room_name=_strip_room_name(room.name),
+                        room_name=strip_room_name(room.name),
                         date=date,
                         start=start_pointer,
-                        end=_combine_datetime_midnight_aware(
+                        end=combine_datetime_midnight_aware(
                             booking.date, booking.start
                         ),
                     )
                 )
             start_pointer = max(
-                _combine_datetime_midnight_aware(date, booking.end), start_pointer
+                combine_datetime_midnight_aware(date, booking.end), start_pointer
             )
 
         # All bookings have been considered, the rest is available
         if end_pointer > start_pointer:
             availabilities.append(
                 RoomAvailability(
-                    room_name=_strip_room_name(room.name),
+                    room_name=strip_room_name(room.name),
                     date=date,
                     start=start_pointer,
                     end=end_pointer,
@@ -234,22 +229,6 @@ def _compute_room_availabilities(
 
     # sort per start
     return sorted(filtered_availabilities, key=lambda a: a.start)
-
-
-def _strip_room_name(room_name: str) -> str:
-    m = re.match(r"^\d+\.([\w\s]+)\s.*$", room_name)
-    if m:
-        return m.group(1)
-    else:
-        return room_name
-
-
-def _combine_datetime_midnight_aware(date: Date, time: Time) -> Datetime:
-    return Datetime.combine(
-        # if the end time is midnight, the date is next day
-        date + timedelta(days=1) if time == Time(hour=0) else date,
-        time,
-    )
 
 
 # debug
