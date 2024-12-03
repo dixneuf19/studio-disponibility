@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Studio Availability</title>
+    <title>Studio Availabilities</title>
     <link id="favicon" rel="icon" type="image/x-icon" href="static/favicon.ico">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <script src="https://unpkg.com/htmx.org@2.0.3" integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDRosgxNsQG/Ze9YMRzHq" crossorigin="anonymous"></script>
@@ -46,9 +46,9 @@
 
 <body hx-ext="loading-states">
     <main class="container">
-        <h1 class="centered">Studio Availability</h1>
+        <h1 class="centered">Studio Availabilities</h1>
 
-        <form id="availabilityForm" hx-get="/availability" hx-target="#result">
+        <form id="availabilitiesForm" hx-get="/availabilities" hx-target="#result">
             <select id="studioName" name="studio_name" aria-label="Select studio" hidden required>
                 <option value="hf-14">HF 14</option>
             </select>
@@ -63,12 +63,12 @@
                     <input type="date" id="endDate" name="end_date" value="{{ Datetime.now().strftime('%Y-%m-%d') }}">
                 </div>
                 <div>
-                    <label for="startTime">Start Time</label>
-                    <input type="time" id="startTime" name="start_time" value="19:00">
+                    <label for="fromTime">From Time</label>
+                    <input type="time" id="fromTime" name="from_time" value="19:00">
                 </div>
                 <div>
-                    <label for="endTime">End Time</label>
-                    <input type="time" id="endTime" name="end_time" value="00:00">
+                    <label for="toTime">To Time</label>
+                    <input type="time" id="toTime" name="to_time" value="00:00">
                 </div>
             </div>
             <fieldset>
@@ -118,7 +118,7 @@
                 </div>
             </div>
 
-            <button data-loading-aria-busy type="submit">Check Availability</button>
+            <button data-loading-aria-busy type="submit">Search Availabilities</button>
         </form>
         <div id="result"></div>
     </main>

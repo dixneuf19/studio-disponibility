@@ -89,12 +89,14 @@ async def index(request: Request):
     )
 
 
-@app.get("/availability", response_class=HTMLResponse)
-async def availability(
+@app.get("/availabilities", response_class=HTMLResponse)
+async def get_availabilities(
     request: Request,
     studio_name: str,
     start_date: Date,
     end_date: Date,
+    from_time: Time,
+    to_time: Time,
     days_of_week: Annotated[list[int], Query()] = [1, 2, 3, 4, 5, 6, 7],
     min_room_size: int = 50,
     min_availability_duration: int = 60,
@@ -183,11 +185,9 @@ def _compute_room_availabilities(
     # only consider big enough rooms
     for room in (room for room in studio.rooms if room.size >= min_room_size):
         start_pointer = Datetime.combine(date, max(room.open, from_time))
-        min_close = min(room.close, to_time)
-        end_pointer = Datetime.combine(
-            # if the end time is midnight, the date is next day
-            date + timedelta(days=1) if min_close == Time(hour=0) else date,
-            min_close,
+        end_pointer = min(
+            _combine_datetime_midnight_aware(date, to_time),
+            _combine_datetime_midnight_aware(date, room.close),
         )
 
         # Sort bookings by chronological order
@@ -206,10 +206,14 @@ def _compute_room_availabilities(
                         room_name=_strip_room_name(room.name),
                         date=date,
                         start=start_pointer,
-                        end=Datetime.combine(booking.date, booking.start),
+                        end=_combine_datetime_midnight_aware(
+                            booking.date, booking.start
+                        ),
                     )
                 )
-            start_pointer = max(Datetime.combine(date, booking.end), start_pointer)
+            start_pointer = max(
+                _combine_datetime_midnight_aware(date, booking.end), start_pointer
+            )
 
         # All bookings have been considered, the rest is available
         if end_pointer > start_pointer:
@@ -240,6 +244,14 @@ def _strip_room_name(room_name: str) -> str:
         return room_name
 
 
+def _combine_datetime_midnight_aware(date: Date, time: Time) -> Datetime:
+    return Datetime.combine(
+        # if the end time is midnight, the date is next day
+        date + timedelta(days=1) if time == Time(hour=0) else date,
+        time,
+    )
+
+
 # debug
-# if __name__ == "__main__":
-#     uvicorn.run(app, host="0.0.0.0", port=8000)
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
