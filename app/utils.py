@@ -1,12 +1,16 @@
 import re
-from datetime import datetime as Datetime, date as Date, time as Time, timedelta
+from datetime import date as Date
+from datetime import datetime as Datetime
+from datetime import time as Time
+from datetime import timedelta
 
-from .sql import Booking
+from .models import Booking
 
 
-def get_next_nth_date(span_days: int) -> list[Date]:
-    today = Datetime.today().date()
-    return [today + timedelta(days=i) for i in range(span_days)]
+def get_dates_from_range(from_date: Date, to_date: Date) -> list[Date]:
+    return [
+        from_date + timedelta(days=day) for day in range((to_date - from_date).days + 1)
+    ]
 
 
 def get_room_id(booking: Booking) -> int:
