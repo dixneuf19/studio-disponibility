@@ -4,7 +4,6 @@ from datetime import date as dt_date
 from datetime import datetime, time, timedelta
 from typing import Tuple
 
-from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import (
     Field,
@@ -18,6 +17,13 @@ from sqlmodel import (
 from .quickstudioapi import RoomBooking, get_quickstudio_bookings
 
 DATA_STALE_MINUTES = int(os.getenv("DATA_STALE_MINUTES", 15))
+SQL_DEBUG = os.getenv("SQL_DEBUG", "true").lower() == "true"
+
+
+# TODO: parametrize the database URL
+sqlite_file_name = "database.db"
+sqlite_url = f"sqlite:///{sqlite_file_name}"
+engine = create_engine(sqlite_url, echo=SQL_DEBUG)
 
 
 class Room(SQLModel, table=True):
@@ -186,18 +192,8 @@ async def get_bookings(
     return _get_bookings(session, studio, date)
 
 
-def init_db(sqlite_url: str, debug: bool = False) -> Engine:
-    engine = create_engine(sqlite_url, echo=debug)
-    SQLModel.metadata.create_all(engine)
-
-    return engine
-
-
 async def main():
-    sqlite_file_name = "database.db"
-    sqlite_url = f"sqlite:///{sqlite_file_name}"
-
-    engine = init_db(sqlite_url, debug=True)
+    SQLModel.metadata.create_all(engine)
 
     hf14 = Studio(name="hf-music-studio-14")
 

@@ -15,11 +15,11 @@ from .sql import (
     Booking,
     Studio,
     get_bookings,
-    init_db,
     refresh_bookings,
+    engine,
 )
 
-from utils import (
+from .utils import (
     get_next_nth_date,
     get_room_id,
     strip_room_name,
@@ -42,12 +42,6 @@ class RoomAvailability(SQLModel):
         return self.end - self.start
 
 
-# TODO: parametrize the database URL
-sqlite_file_name = "database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
-engine = init_db(sqlite_url)
-
-
 async def _load_bookings_cache():
     with Session(engine) as session:
         studios = session.exec(select(Studio)).all()
@@ -59,6 +53,7 @@ async def _load_bookings_cache():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load the ML model
+    SQLModel.metadata.create_all(engine)
 
     for studio_name in STUDIO_NAMES:
         with Session(engine) as session:
